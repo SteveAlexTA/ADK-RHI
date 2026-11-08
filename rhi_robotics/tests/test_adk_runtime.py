@@ -40,37 +40,35 @@ class FakeRunner:
 class AdkRuntimeTests(unittest.TestCase):
     def test_run_agent_uses_adk_runner_and_structured_output(self) -> None:
         with (
-            patch.dict(os.environ, {"GROQ_API_KEY": "mock-key"}),
+            patch.dict(os.environ, {"GOOGLE_API_KEY": "mock-key"}),
             patch.object(adk_runtime, "InMemorySessionService", FakeSessionService),
             patch.object(adk_runtime, "LlmAgent") as llm_agent,
-            patch.object(adk_runtime, "LiteLlm", return_value="mock-model") as lite_llm,
             patch.object(adk_runtime, "Runner", FakeRunner),
         ):
             response = adk_runtime.run_agent(
                 agent_name="rhi_evaluator",
-                model_name="groq/openai/gpt-oss-120b",
+                model_name="gemini-3.8-flash",
                 instruction="Return JSON.",
                 user_prompt="Compare two results.",
                 temperature=0.1,
                 output_schema=EvaluationResponse,
             )
-
         self.assertEqual(response, "Mocked ADK response")
-        lite_llm.assert_called_once_with(model="groq/openai/gpt-oss-120b")
+        self.assertEqual(response, "Mocked ADK response")
         agent_arguments = llm_agent.call_args.kwargs
         self.assertEqual(agent_arguments["name"], "rhi_evaluator")
-        self.assertEqual(agent_arguments["model"], "mock-model")
+        self.assertEqual(agent_arguments["model"], "gemini-3.8-flash")
         self.assertIs(agent_arguments["output_schema"], EvaluationResponse)
 
-    def test_run_agent_requires_groq_key_without_calling_runner(self) -> None:
+    def test_run_agent_requires_google_key_without_calling_runner(self) -> None:
         with (
             patch.dict(os.environ, {}, clear=True),
             patch.object(adk_runtime, "Runner") as runner,
-            self.assertRaisesRegex(RuntimeError, "GROQ_API_KEY"),
+            self.assertRaisesRegex(RuntimeError, "GOOGLE_API_KEY"),
         ):
             adk_runtime.run_agent(
                 agent_name="rhi_code_executor",
-                model_name="groq/qwen/qwen3-32b",
+                model_name="gemini-3.6-flash",
                 instruction="Generate files.",
                 user_prompt="Build the project.",
                 temperature=0.3,
@@ -78,14 +76,14 @@ class AdkRuntimeTests(unittest.TestCase):
 
         runner.assert_not_called()
 
-    def test_components_default_to_separate_groq_models(self) -> None:
+    def test_components_default_to_separate_gemini_models(self) -> None:
         self.assertEqual(
             RHIExecutionAgent().model_name,
-            "groq/qwen/qwen3-32b",
+            "gemini-3.6-flash",
         )
         self.assertEqual(
             RHIEvaluator().model_name,
-            "groq/openai/gpt-oss-120b",
+            "gemini-3.8-flash",
         )
         self.assertEqual(
             HarnessOptimizationResponse.model_fields.keys(),
@@ -99,10 +97,10 @@ class AdkRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             RHIHarnessOptimizer().model_name,
-            "groq/openai/gpt-oss-120b",
+            "gemini-3.8-flash",
         )
 
-    def test_evaluator_and_optimizer_use_the_gpt_oss_schema(self) -> None:
+    def test_evaluator_and_optimizer_use_their_structured_output_schemas(self) -> None:
         evaluation = (
             '{"winner":"A","rationale":"Evidence","actionable_takeaways":[],'
             '"recurring_defect_tags":[]}'
@@ -115,6 +113,7 @@ class AdkRuntimeTests(unittest.TestCase):
         with (
             patch.object(Path, "rglob", return_value=[]),
             patch.object(Path, "exists", return_value=False),
+            patch.object(RHIEvaluator, "_build_repo_summary", return_value="submission"),
             patch("rhi_robotics.evaluator.run_agent", return_value=evaluation) as evaluate,
             patch(
                 "rhi_robotics.harness_optimizer.run_agent",
@@ -136,9 +135,9 @@ class AdkRuntimeTests(unittest.TestCase):
 
         self.assertEqual(result["winner"], "A")
         self.assertEqual(improved_design, "Updated design")
-        self.assertEqual(evaluate.call_args.kwargs["model_name"], "groq/openai/gpt-oss-120b")
+        self.assertEqual(evaluate.call_args.kwargs["model_name"], "gemini-3.8-flash")
         self.assertIs(evaluate.call_args.kwargs["output_schema"], EvaluationResponse)
-        self.assertEqual(optimize.call_args.kwargs["model_name"], "groq/openai/gpt-oss-120b")
+        self.assertEqual(optimize.call_args.kwargs["model_name"], "gemini-3.8-flash")
         self.assertIs(
             optimize.call_args.kwargs["output_schema"],
             HarnessOptimizationResponse,
@@ -178,13 +177,14 @@ class AdkRuntimeTests(unittest.TestCase):
             )
 
         self.assertEqual(result, Path("workspace"))
-        self.assertEqual(len(opened_files), 2)
+        self.assertEqual(len(opened_files), 3)
         self.assertTrue(opened_files[0][0].name == "result.txt")
         self.assertTrue(opened_files[1][0].name == "logs.txt")
-        self.assertEqual([item[1:3] for item in opened_files], [("x", "utf-8")] * 2)
+        self.assertTrue(opened_files[2][0].name == "run_complete.txt")
+        self.assertEqual([item[1:3] for item in opened_files], [("x", "utf-8")] * 3)
         self.assertEqual(
             [item[3].__enter__.return_value.write.call_args.args[0] for item in opened_files],
-            ["result content", response],
+            ["result content", response, "result.txt"],
         )
 
     def test_generated_path_cannot_escape_output_directory(self) -> None:

@@ -17,8 +17,8 @@ def main():
     base_dir = Path("outputs_rhi_robotics")
     base_dir.mkdir(exist_ok=True)
     
-    code_model = os.getenv("GROQ_CODE_MODEL", "groq/qwen/qwen3.8-27b")
-    review_model = os.getenv("GROQ_REVIEW_MODEL", "groq/openai/gpt-oss-120b")
+    code_model = os.getenv("GEMINI_CODE_MODEL", "gemini-3.6-flash")
+    review_model = os.getenv("GEMINI_REVIEW_MODEL", "gemini-3.8-flash")
 
     executor = RHIExecutionAgent(model_name=code_model)
     evaluator = RHIEvaluator(model_name=review_model)

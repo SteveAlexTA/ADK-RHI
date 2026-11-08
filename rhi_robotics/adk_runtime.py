@@ -1,12 +1,10 @@
 import asyncio
 import os
-from typing import Any
 
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from google.adk.agents import LlmAgent
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -38,9 +36,9 @@ async def run_adk_agent(
     temperature: float,
     output_schema: type[BaseModel] | None = None,
 ) -> str:
-    """Run a single-turn ADK agent backed by LiteLLM and return its final text."""
-    if not os.environ.get("GROQ_API_KEY"):
-        raise RuntimeError("GROQ_API_KEY is missing. Add it to the .env file.")
+    """Run a single-turn ADK agent using Gemini and return its final text."""
+    if not os.environ.get("GOOGLE_API_KEY"):
+        raise RuntimeError("GOOGLE_API_KEY is missing. Add it to the .env file.")
 
     app_name = "rhi_robotics"
     user_id = "rhi_robotics"
@@ -49,13 +47,12 @@ async def run_adk_agent(
         app_name=app_name,
         user_id=user_id,
     )
-    config: dict[str, Any] = {"temperature": temperature}
     agent = LlmAgent(
         name=agent_name,
-        model=LiteLlm(model=model_name),
+        model=model_name,
         instruction=instruction,
         output_schema=output_schema,
-        generate_content_config=types.GenerateContentConfig(**config),
+        generate_content_config=types.GenerateContentConfig(temperature=temperature),
     )
     runner = Runner(
         agent=agent,

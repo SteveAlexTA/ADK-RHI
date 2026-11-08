@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class RHIExecutionAgent:
-    def __init__(self, model_name: str = "groq/qwen/qwen3.8-27b"):
+    def __init__(self, model_name: str = "gemini-3.6-flash"):
         self.model_name = model_name
 
     def run_iteration(self, task_prompt: str, harness_prompt: str, output_dir: Path) -> Path:
