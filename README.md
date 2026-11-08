@@ -81,6 +81,10 @@ before completion, the program will ask you to move or rename that incomplete
 iteration workspace before retrying. Rename or back up `outputs_rhi_robotics`
 before starting a completely fresh run if you need to preserve prior results.
 
+Alternatively, open `run_rhi.ipynb` in VS Code, select the repository's `.venv`
+Python kernel, and run its cell. The notebook launches the same entry point from
+the repository root and displays subprocess output and errors in the cell.
+
 ## Project layout
 
 - `rhi_robotics\run_rhi_loop.py`: RHI iteration orchestration and model routing
