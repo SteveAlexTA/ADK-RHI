@@ -38,6 +38,16 @@ class FakeRunner:
 
 
 class AdkRuntimeTests(unittest.TestCase):
+    def test_timeout_and_server_errors_are_retryable(self) -> None:
+        class TemporaryServerError(Exception):
+            status_code = 503
+
+        self.assertTrue(adk_runtime._is_retryable_provider_error(TimeoutError()))
+        self.assertTrue(
+            adk_runtime._is_retryable_provider_error(TemporaryServerError())
+        )
+        self.assertFalse(adk_runtime._is_retryable_provider_error(ValueError()))
+
     def test_run_agent_uses_adk_runner_and_structured_output(self) -> None:
         with (
             patch.dict(os.environ, {"GOOGLE_API_KEY": "mock-key"}),

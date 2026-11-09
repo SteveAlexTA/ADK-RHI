@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from pydantic import BaseModel
@@ -9,6 +10,9 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
+logger = logging.getLogger(__name__)
+MODEL_ATTEMPT_TIMEOUT_SECONDS = 120
+
 
 def _is_retryable_provider_error(exception: BaseException) -> bool:
     if type(exception).__name__ in {
@@ -16,6 +20,7 @@ def _is_retryable_provider_error(exception: BaseException) -> bool:
         "RateLimitError",
         "ServiceUnavailableError",
         "Timeout",
+        "TimeoutError",
     }:
         return True
     status_code = getattr(exception, "status_code", None)
@@ -24,8 +29,14 @@ def _is_retryable_provider_error(exception: BaseException) -> bool:
 
 @retry(
     retry=retry_if_exception(_is_retryable_provider_error),
-    wait=wait_random_exponential(min=10, max=60),
-    stop=stop_after_attempt(4),
+    wait=wait_random_exponential(min=5, max=20),
+    stop=stop_after_attempt(3),
+    before_sleep=lambda retry_state: logger.warning(
+        "Transient model error %s; retrying in %.1f seconds (attempt %s of 3)",
+        retry_state.outcome.exception(),
+        retry_state.next_action.sleep,
+        retry_state.attempt_number + 1,
+    ),
     reraise=True,
 )
 async def run_adk_agent(
@@ -64,17 +75,24 @@ async def run_adk_agent(
         parts=[types.Part(text=user_prompt)],
     )
     final_response = ""
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session.id,
-        new_message=message,
-    ):
-        if event.is_final_response():
-            final_response = "".join(
-                part.text
-                for part in (event.content.parts if event.content else [])
-                if part.text
-            )
+    try:
+        async with asyncio.timeout(MODEL_ATTEMPT_TIMEOUT_SECONDS):
+            async for event in runner.run_async(
+                user_id=user_id,
+                session_id=session.id,
+                new_message=message,
+            ):
+                if event.is_final_response():
+                    final_response = "".join(
+                        part.text
+                        for part in (event.content.parts if event.content else [])
+                        if part.text
+                    )
+    except TimeoutError as error:
+        raise TimeoutError(
+            f"Gemini agent {agent_name} did not respond within "
+            f"{MODEL_ATTEMPT_TIMEOUT_SECONDS} seconds."
+        ) from error
 
     if final_response:
         return final_response
